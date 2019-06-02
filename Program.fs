@@ -7,6 +7,8 @@ open Veldrid
 open Veldrid.SPIRV
 open System.Text
 open Veldrid
+open Veldrid
+open Veldrid
 
 module Game = 
     [<Struct>]
@@ -94,9 +96,30 @@ module Game =
         pipelineDescription.ShaderSet <- ShaderSetDescription(
             vertexLayouts =  [|vertexLayout|] ,
             shaders = shaders );
+        pipelineDescription.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
+        let pipeline = factory.CreateGraphicsPipeline pipelineDescription
+        factory.CreateCommandList(), graphicsDevice, vertexBuffer, indexBuffer, pipeline
+        
+    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline) = 
+        commandList.Begin()
+        commandList.SetFramebuffer graphicsDevice.SwapchainFramebuffer
+        commandList.ClearColorTarget (0u, RgbaFloat.Black)
+        commandList.SetVertexBuffer (0u, vertexBuffer)
+        commandList.SetIndexBuffer (indexBuffer, IndexFormat.UInt16)
+        commandList.SetPipeline(pipeline)
+        commandList.DrawIndexed(
+            indexCount= 4u,
+            instanceCount= 1u,
+            indexStart= 0u,
+            vertexOffset= 0,
+            instanceStart= 0u)
+        commandList.End()
+        graphicsDevice.SubmitCommands(commandList)
+        graphicsDevice.SwapBuffers()
+
+
+
         ()
-        
-        
 
 [<EntryPoint>]
 let main argv =
@@ -104,7 +127,8 @@ let main argv =
     let wci = Game.createWindow "Suits"
     
     let window = VeldridStartup.CreateWindow(ref wci)
-    Game.createResources window |> ignore
+    let commandList = Game.createResources window
     while window.Exists do
         window.PumpEvents() |> ignore
+        Game.Draw commandList |> ignore
     0 // return an integer exit code
