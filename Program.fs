@@ -6,9 +6,7 @@ open System.Numerics
 open Veldrid
 open Veldrid.SPIRV
 open System.Text
-open Veldrid
-open Veldrid
-open Veldrid
+
 
 module Game = 
     [<Struct>]
@@ -98,9 +96,9 @@ module Game =
             shaders = shaders );
         pipelineDescription.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
         let pipeline = factory.CreateGraphicsPipeline pipelineDescription
-        factory.CreateCommandList(), graphicsDevice, vertexBuffer, indexBuffer, pipeline
+        factory.CreateCommandList(), graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders
         
-    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline) = 
+    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders) = 
         commandList.Begin()
         commandList.SetFramebuffer graphicsDevice.SwapchainFramebuffer
         commandList.ClearColorTarget (0u, RgbaFloat.Black)
@@ -124,11 +122,21 @@ module Game =
 [<EntryPoint>]
 let main argv =
     
-    let wci = Game.createWindow "Suits"
+    let wci = Game.createWindow "veldridGame"
     
     let window = VeldridStartup.CreateWindow(ref wci)
-    let commandList = Game.createResources window
+    let props = Game.createResources window
+    let (cl, gd , vb, ib, pl, shaders) = props    
     while window.Exists do
         window.PumpEvents() |> ignore
-        Game.Draw commandList |> ignore
+        Game.Draw props |> ignore
+    let dispose () =
+        cl.Dispose()
+        gd.Dispose()
+        vb.Dispose()
+        ib.Dispose()
+        pl.Dispose()
+        shaders |> Array.iter(fun x -> x.Dispose())
+        ()
+    dispose()
     0 // return an integer exit code
