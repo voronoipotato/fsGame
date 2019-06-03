@@ -46,33 +46,10 @@ module Game =
             let color = VertexElementDescription("Color", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             VertexLayoutDescription(position, color)
 
-        let vertexCode = 
-            "
-            #version 450
+        let vertexCode = IO.File.ReadAllText("vertexShader.glsl")
 
-            layout(location = 0) in vec2 Position;
-            layout(location = 1) in vec4 Color;
-
-            layout(location = 0) out vec4 fsin_Color;
-
-            void main()
-            {
-                gl_Position = vec4(Position, 0, 1);
-                fsin_Color = Color;
-            }
-            "
-
-        let fragmentCode = 
-            "
-            #version 450
-
-            layout(location = 0) in vec4 fsin_Color;
-            layout(location = 0) out vec4 fsout_Color;
-
-            void main()
-            {
-                fsout_Color = fsin_Color;
-            }"
+        let fragmentCode =  IO.File.ReadAllText("fragmentShader.glsl")
+            
         let vertexShaderDesc = ShaderDescription(ShaderStages.Vertex, Encoding.UTF8.GetBytes(vertexCode), "main" )
         let fragmentShaderDesc =  ShaderDescription(ShaderStages.Fragment, Encoding.UTF8.GetBytes(fragmentCode), "main")
         let shaders = factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
@@ -114,9 +91,6 @@ module Game =
         commandList.End()
         graphicsDevice.SubmitCommands(commandList)
         graphicsDevice.SwapBuffers()
-
-
-
         ()
 
 [<EntryPoint>]

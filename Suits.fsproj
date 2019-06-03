@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <Compile Include="Program.fs" />
+    <Content Include="fragmentShader.glsl" Link="fragmentShader.glsl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="vertexShader.glsl" Link="vertexShader.glsl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
