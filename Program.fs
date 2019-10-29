@@ -8,18 +8,21 @@ open Veldrid.SPIRV
 open System.Text
 
 module Shape =
-    let rectangle p w h (c: RgbaFloat) =
-        let dimensions = Vector2(w, h) / Vector2(2.f)
+    let rectangle position width height (color: RgbaFloat) =
+        let dimensions = Vector2(width, height) / Vector2(2.f)
         let format =
             [
                 (-1.f, 1.f)
                 (1.f,  1.f)
                 (-1.f,-1.f)
                 (1.f, -1.f)
-            ]
-        let createV2 (x, y) = Vector2(x,y)
-        Seq.map (createV2 >> ((*) dimensions ) >> ((+) p) >> (fun v-> (v,c))) format
-    let square p s c = rectangle p s s c
+            ] |> Array.ofList
+        
+        Array.map ((fun (x,y) -> Vector2(x,y)) 
+                    >> ((*) dimensions ) 
+                    >> ((+) position) 
+                    >> (fun v-> (v,color))) format
+    let square position size color = rectangle position size size color
 
 module Game = 
     [<Struct>]
@@ -57,7 +60,7 @@ module Game =
         let redRect = Shape.square (Vector2(0.125f)) 0.5f RgbaFloat.DarkRed
         let yellowRect = Shape.square (Vector2(0.25f)) 0.5f RgbaFloat.Yellow
 
-        let quadVerticies = [|
+        let quadVerticies: (Vector2 * RgbaFloat) [] = [|
             yield! grayRect
             yield! blueRect
             yield! redRect
@@ -103,7 +106,8 @@ module Game =
             pipelineDescription
 
         let pipeline = factory.CreateGraphicsPipeline pipelineDescription
-        factory.CreateCommandList(), graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders, uint32 quadVerticies.Length
+        let commandList = factory.CreateCommandList()
+        commandList, graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders, uint32 quadVerticies.Length
 
     let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders, indexCount) = 
         commandList.Begin()
@@ -139,6 +143,6 @@ let main argv =
         indexBuffer.Dispose()
         pipeline.Dispose()
         shaders |> Array.iter(fun x -> x.Dispose())
-        ()
-    dispose()
+        
+    do dispose()
     0 // return an integer exit code

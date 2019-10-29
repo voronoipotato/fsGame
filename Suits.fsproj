@@ -1,20 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.2</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Program.fs" />
-    <Content Include="fragmentShader.glsl" Link="fragmentShader.glsl" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="vertexShader.glsl" Link="vertexShader.glsl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="fragmentShader.glsl" />
+    <Content Include="vertexShader.glsl" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="veldrid" Version="4.6.1" />
     <PackageReference Include="Veldrid.SPIRV" Version="1.0.9" />
     <PackageReference Include="Veldrid.StartupUtilities" Version="4.6.1" />
   </ItemGroup>
-
 </Project>
