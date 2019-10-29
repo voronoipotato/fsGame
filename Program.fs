@@ -7,87 +7,121 @@ open Veldrid
 open Veldrid.SPIRV
 open System.Text
 
+module Shape =
+    let rectangle position width height (color: RgbaFloat) =
+        let dimensions = Vector2(width, height) / Vector2(2.f)
+        let format =
+            [
+                (-1.f, 1.f)
+                (1.f,  1.f)
+                (-1.f,-1.f)
+                (1.f, -1.f)
+            ] |> Array.ofList
+        
+        Array.map ((fun (x,y) -> Vector2(x,y)) 
+                    >> ((*) dimensions ) 
+                    >> ((+) position) 
+                    >> (fun v-> (v,color))) format
+    let square position size color = rectangle position size size color
 
 module Game = 
     [<Struct>]
-    type VertexPositionColor = 
+    type Vertex = 
         {Position: Vector2; Color: RgbaFloat}
-        static member VertexPositionColor(position, color) = {Position = position; Color = color}
-
+    module Vertex= 
+        let create (position, color) = {Position = position; Color = color}
     let createWindow title = 
         let mutable wci = WindowCreateInfo()
-        wci.X <- 100
-        wci.Y <- 100
-        wci.WindowWidth <- 960
-        wci.WindowHeight <- 540
-        wci.WindowTitle <- title
+        wci.X            <- 100
+        wci.Y            <- 100
+        wci.WindowWidth  <- 960
+        wci.WindowHeight <- 960
+        wci.WindowTitle  <- title
         wci
+
+    let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
 
     let createResources window = 
         let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
         let factory = graphicsDevice.ResourceFactory
-        let quadVerticies' = [|
-            Vector2(-0.75f,0.75f), RgbaFloat.Red
-            Vector2(0.75f, 0.75f), RgbaFloat.Green 
-            Vector2(-0.75f,-0.75f), RgbaFloat.Blue
-            Vector2(0.75f,-0.75f), RgbaFloat.Yellow 
-            |]
-        let quadVerticies = quadVerticies' |> Array.map VertexPositionColor.VertexPositionColor
-        let quadIndicies : uint16[] = [|0us;1us;2us;3us|]
-        let quadVerticiesSize : uint32 = sizeof<VertexPositionColor> * quadVerticies.Length |> uint32
-        let vertexBuffer = factory.CreateBuffer(BufferDescription(quadVerticiesSize,BufferUsage.VertexBuffer))
-        let indiciesSize = 4u * uint32 sizeof<uint16>
-        let indexBuffer = factory.CreateBuffer(BufferDescription(indiciesSize, BufferUsage.IndexBuffer))
-        graphicsDevice.UpdateBuffer (vertexBuffer, 0u , quadVerticies) |> ignore
-        graphicsDevice.UpdateBuffer (indexBuffer, 0u, quadIndicies ) |> ignore
+        let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
 
+        let createBuffers quadVerticies =
+            let quadVerticies = quadVerticies |> Array.map Vertex.create
+            let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
+            let vertexBuffer = BufferDescription( getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
+            let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
+            do graphicsDevice.UpdateBuffer (vertexBuffer, 0u, quadVerticies)
+            do graphicsDevice.UpdateBuffer (indexBuffer,  0u, quadIndicies)
+            (vertexBuffer, indexBuffer)
+
+        let grayRect = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
+        let blueRect = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
+        let redRect = Shape.square (Vector2(0.125f)) 0.5f RgbaFloat.DarkRed
+        let yellowRect = Shape.square (Vector2(0.25f)) 0.5f RgbaFloat.Yellow
+
+        let quadVerticies: (Vector2 * RgbaFloat) [] = [|
+            yield! grayRect
+            yield! blueRect
+            yield! redRect
+            yield! yellowRect
+            |]
+
+        let (vertexBuffer, indexBuffer) = createBuffers quadVerticies
         let vertexLayout = 
             let position = VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2)
             let color = VertexElementDescription("Color", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             VertexLayoutDescription(position, color)
 
-        let vertexCode = IO.File.ReadAllText("vertexShader.glsl")
+        let getBytes (s : string) = Encoding.UTF8.GetBytes s
+        let vertexShaderDesc = 
+            let vertexCode = IO.File.ReadAllText("vertexShader.glsl")
+            ShaderDescription(ShaderStages.Vertex, getBytes(vertexCode), "main")
 
-        let fragmentCode =  IO.File.ReadAllText("fragmentShader.glsl")
-            
-        let vertexShaderDesc = ShaderDescription(ShaderStages.Vertex, Encoding.UTF8.GetBytes(vertexCode), "main" )
-        let fragmentShaderDesc =  ShaderDescription(ShaderStages.Fragment, Encoding.UTF8.GetBytes(fragmentCode), "main")
+        let fragmentShaderDesc =
+            let fragmentCode =  IO.File.ReadAllText("fragmentShader.glsl")
+            ShaderDescription(ShaderStages.Fragment, getBytes(fragmentCode), "main")
+
         let shaders = factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
-        
-        let mutable pipelineDescription = GraphicsPipelineDescription()
-        pipelineDescription.BlendState <- BlendStateDescription.SingleOverrideBlend;
-        pipelineDescription.DepthStencilState <- DepthStencilStateDescription(
-            depthTestEnabled= true,
-            depthWriteEnabled= true,
-            comparisonKind= ComparisonKind.LessEqual);
-        pipelineDescription.RasterizerState <- RasterizerStateDescription(
-            cullMode= FaceCullMode.Back,
-            fillMode= PolygonFillMode.Solid,
-            frontFace= FrontFace.Clockwise,
-            depthClipEnabled= true,
-            scissorTestEnabled= false)
-        pipelineDescription.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
-        pipelineDescription.ResourceLayouts <- Array.empty<ResourceLayout>
-        pipelineDescription.ShaderSet <- ShaderSetDescription(
-            vertexLayouts =  [|vertexLayout|] ,
-            shaders = shaders );
-        pipelineDescription.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
+
+        let pipelineDescription =
+            let mutable pipelineDescription = GraphicsPipelineDescription()
+            pipelineDescription.BlendState <- BlendStateDescription.SingleOverrideBlend
+            pipelineDescription.DepthStencilState <- DepthStencilStateDescription(
+                depthTestEnabled= true,
+                depthWriteEnabled= true,
+                comparisonKind= ComparisonKind.LessEqual)
+            pipelineDescription.RasterizerState <- RasterizerStateDescription(
+                cullMode= FaceCullMode.Back,
+                fillMode= PolygonFillMode.Solid,
+                frontFace= FrontFace.Clockwise,
+                depthClipEnabled= true,
+                scissorTestEnabled= false)
+            pipelineDescription.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
+            pipelineDescription.ResourceLayouts <- Array.empty<ResourceLayout>
+            pipelineDescription.ShaderSet <- ShaderSetDescription(
+                vertexLayouts =  [|vertexLayout|] ,
+                shaders = shaders )
+            pipelineDescription.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
+            pipelineDescription
+
         let pipeline = factory.CreateGraphicsPipeline pipelineDescription
-        factory.CreateCommandList(), graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders
-        
-    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders) = 
+        let commandList = factory.CreateCommandList()
+        commandList, graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders, uint32 quadVerticies.Length
+
+    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders, indexCount) = 
         commandList.Begin()
         commandList.SetFramebuffer graphicsDevice.SwapchainFramebuffer
         commandList.ClearColorTarget (0u, RgbaFloat.Black)
         commandList.SetVertexBuffer (0u, vertexBuffer)
         commandList.SetIndexBuffer (indexBuffer, IndexFormat.UInt16)
-        commandList.SetPipeline(pipeline)
+        commandList.SetPipeline (pipeline)
         commandList.DrawIndexed(
-            indexCount= 4u,
-            instanceCount= 1u,
-            indexStart= 0u,
-            vertexOffset= 0,
-            instanceStart= 0u)
+            indexCount    = indexCount,
+            instanceCount = 1u,
+            indexStart    = 0u,
+            vertexOffset  = 0,
+            instanceStart = 0u)
         commandList.End()
         graphicsDevice.SubmitCommands(commandList)
         graphicsDevice.SwapBuffers()
@@ -95,22 +129,20 @@ module Game =
 
 [<EntryPoint>]
 let main argv =
-    
     let wci = Game.createWindow "veldridGame"
-    
     let window = VeldridStartup.CreateWindow(ref wci)
     let props = Game.createResources window
-    let (cl, gd , vb, ib, pl, shaders) = props    
     while window.Exists do
         window.PumpEvents() |> ignore
-        Game.Draw props |> ignore
+        do Game.Draw props
+    let (commandList, graphicsDevice , vertexBuffer, indexBuffer, pipeline, shaders, _) = props    
     let dispose () =
-        cl.Dispose()
-        gd.Dispose()
-        vb.Dispose()
-        ib.Dispose()
-        pl.Dispose()
+        commandList.Dispose()
+        graphicsDevice.Dispose()
+        vertexBuffer.Dispose()
+        indexBuffer.Dispose()
+        pipeline.Dispose()
         shaders |> Array.iter(fun x -> x.Dispose())
-        ()
-    dispose()
+        
+    do dispose()
     0 // return an integer exit code
