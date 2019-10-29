@@ -5,7 +5,9 @@ open Veldrid.StartupUtilities
 open System.Numerics
 open Veldrid
 open Veldrid.SPIRV
+open FShade
 open System.Text
+open Aardvark.Base
 
 module Shape =
     let rectangle position width height (color: RgbaFloat) =
@@ -24,12 +26,64 @@ module Shape =
                     >> (fun v-> (v,color))) format
     let square position size color = rectangle position size size color
 
+module ShaderTools = 
+    let print (add : list<string * System.Type>) (effect : Effect) =
+        match effect.LastShader with
+            | Some shader ->
+                let mutable index = 0
+                let id () =
+                    let i = index
+                    index <- i + 1
+                    i
+
+                let existing = shader.shaderOutputs |> Map.remove Intrinsics.SourceVertexIndex |> Map.map (fun name desc -> desc.paramType, id())
+                let additional = add |> Map.ofList |> Map.map (fun name t -> t, id())
+
+                let config =
+                    {
+                        depthRange      = Range1d(-1.0, 1.0)
+                        flipHandedness  = false
+                        lastStage       = shader.shaderStage
+                        outputs         = Map.union existing additional 
+                    }
+
+                let glsl410 =
+                    GLSL.Backend.Create {
+                        version                 = System.Version(4,5)
+                        enabledExtensions       = Set.ofList [ ]
+                        createUniformBuffers    = true
+                        bindingMode             = GLSL.BindingMode.PerKind
+                        createDescriptorSets    = true
+                        stepDescriptorSets      = false
+                        createInputLocations    = true
+                        createPerStageUniforms  = false
+                        reverseMatrixLogic      = true
+                    }
+
+                let glsl = 
+                    effect
+                        // compile the thing
+                        |> Effect.toModule config
+                        |> ModuleCompiler.compileGLSL glsl410
+                        
+                
+                sprintf "%s" glsl.code
+
+            | None ->
+                ""
+
 module Game = 
+    type Frag = {[<Color>] c: V4d}
+    
     [<Struct>]
     type Vertex = 
-        {Position: Vector2; Color: RgbaFloat}
+        {
+            Color: RgbaFloat
+            Position: Vector4; 
+        }
+        
     module Vertex= 
-        let create (position, color) = {Position = position; Color = color}
+        let from2D (position: Vector2, color) = {Position = Vector4(position, 0.f ,1.f); Color = color}
     let createWindow title = 
         let mutable wci = WindowCreateInfo()
         wci.X            <- 100
@@ -38,7 +92,7 @@ module Game =
         wci.WindowHeight <- 960
         wci.WindowTitle  <- title
         wci
-
+           
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
 
     let createResources window = 
@@ -47,7 +101,7 @@ module Game =
         let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
 
         let createBuffers quadVerticies =
-            let quadVerticies = quadVerticies |> Array.map Vertex.create
+            let quadVerticies = quadVerticies |> Array.map Vertex.from2D
             let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
             let vertexBuffer = BufferDescription( getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
@@ -69,20 +123,35 @@ module Game =
 
         let (vertexBuffer, indexBuffer) = createBuffers quadVerticies
         let vertexLayout = 
-            let position = VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2)
-            let color = VertexElementDescription("Color", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
+            let position = VertexElementDescription("Positions", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
+            let color = VertexElementDescription("Colors", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             VertexLayoutDescription(position, color)
 
         let getBytes (s : string) = Encoding.UTF8.GetBytes s
-        let vertexShaderDesc = 
-            let vertexCode = IO.File.ReadAllText("vertexShader.glsl")
-            ShaderDescription(ShaderStages.Vertex, getBytes(vertexCode), "main")
 
-        let fragmentShaderDesc =
-            let fragmentCode =  IO.File.ReadAllText("fragmentShader.glsl")
-            ShaderDescription(ShaderStages.Fragment, getBytes(fragmentCode), "main")
+        let fragmentShader (v: Frag)  = 
+            fragment {
+                return {c = v.c}
+            }
 
-        let shaders = factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
+        // let vertexShaderDesc = 
+        //     let vertexCode = IO.File.ReadAllText("vertexShader.glsl")
+        //     ShaderDescription(ShaderStages.Vertex, getBytes(vertexCode), "main")
+
+        // let fragmentShaderDesc =
+        //         //|> ModuleCompiler.compileGLSL430
+        //     let fragmentCode = IO.File.ReadAllText("fragmentShader.glsl")
+        //     ShaderDescription(ShaderStages.Fragment, getBytes(fragmentCode), "main")
+        
+        let shaderCode = 
+            fragmentShader
+            |> Effect.ofFunction 
+            |> ShaderTools.print []
+            
+        printfn "%s" shaderCode        
+        let vertexShaderDesc = ShaderDescription(ShaderStages.Vertex, getBytes(shaderCode.Replace("#version 450","#version 450\r\n#define Vertex")), "main")
+        let fragmentShaderDesc = ShaderDescription(ShaderStages.Fragment, getBytes(shaderCode.Replace("#version 450","#version 450\r\n#define Fragment")), "main")
+        let shaders =  factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
 
         let pipelineDescription =
             let mutable pipelineDescription = GraphicsPipelineDescription()
@@ -102,6 +171,7 @@ module Game =
             pipelineDescription.ShaderSet <- ShaderSetDescription(
                 vertexLayouts =  [|vertexLayout|] ,
                 shaders = shaders )
+            
             pipelineDescription.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
             pipelineDescription
 
