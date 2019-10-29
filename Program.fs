@@ -148,9 +148,12 @@ module Game =
             |> Effect.ofFunction 
             |> ShaderTools.print []
             
-        printfn "%s" shaderCode        
-        let vertexShaderDesc = ShaderDescription(ShaderStages.Vertex, getBytes(shaderCode.Replace("#version 450","#version 450\r\n#define Vertex")), "main")
-        let fragmentShaderDesc = ShaderDescription(ShaderStages.Fragment, getBytes(shaderCode.Replace("#version 450","#version 450\r\n#define Fragment")), "main")
+        printfn "%s" shaderCode
+        let vertexCode = shaderCode.Replace("#version 450","#version 450\n#define Vertex")
+        let fragmentCode = shaderCode.Replace("#version 450","#version 450\n#define Fragment")
+
+        let vertexShaderDesc = ShaderDescription(ShaderStages.Vertex, getBytes(vertexCode), "main")
+        let fragmentShaderDesc = ShaderDescription(ShaderStages.Fragment, getBytes(fragmentCode), "main")
         let shaders =  factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
 
         let pipelineDescription =
