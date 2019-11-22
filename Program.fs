@@ -1,6 +1,7 @@
 ﻿// Learn more about F# at http://fsharp.org
 
 open System
+open System.Runtime.CompilerServices
 open Veldrid.StartupUtilities
 open System.Numerics
 open Veldrid
@@ -79,7 +80,7 @@ module Game =
     type Vertex = 
         {
             Color: RgbaFloat
-            Position: Vector4; 
+            Position: Vector4
         }
         
     module Vertex= 
@@ -92,40 +93,41 @@ module Game =
         wci.WindowHeight <- 960
         wci.WindowTitle  <- title
         wci
-           
+
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
 
     let createResources window = 
         let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
         let factory = graphicsDevice.ResourceFactory
-        let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
 
         let createBuffers quadVerticies =
-            let quadVerticies = quadVerticies |> Array.map Vertex.from2D
+            let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
+
             let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
-            let vertexBuffer = BufferDescription( getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
+            let vertexBuffer = BufferDescription(getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
             do graphicsDevice.UpdateBuffer (vertexBuffer, 0u, quadVerticies)
             do graphicsDevice.UpdateBuffer (indexBuffer,  0u, quadIndicies)
             (vertexBuffer, indexBuffer)
 
-        let grayRect = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
-        let blueRect = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
-        let redRect = Shape.square (Vector2(0.125f)) 0.5f RgbaFloat.DarkRed
+        let grayRect  = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
+        let blueRect  = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
+        let redRect   = Shape.square (Vector2(0.125f)) 0.5f RgbaFloat.DarkRed
         let yellowRect = Shape.square (Vector2(0.25f)) 0.5f RgbaFloat.Yellow
 
-        let quadVerticies: (Vector2 * RgbaFloat) [] = [|
-            yield! grayRect
-            yield! blueRect
-            yield! redRect
-            yield! yellowRect
-            |]
+        let quadVerticies = 
+            [|
+                yield! grayRect
+                yield! blueRect
+                yield! redRect
+                yield! yellowRect
+            |] |> Array.map Vertex.from2D
 
         let (vertexBuffer, indexBuffer) = createBuffers quadVerticies
         let vertexLayout = 
             let position = VertexElementDescription("Positions", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             let color = VertexElementDescription("Colors", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
-            VertexLayoutDescription(position, color)
+            VertexLayoutDescription(color, position)
 
         let getBytes (s : string) = Encoding.UTF8.GetBytes s
 
