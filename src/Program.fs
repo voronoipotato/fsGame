@@ -9,6 +9,7 @@ open Veldrid.SPIRV
 open FShade
 open System.Text
 open Aardvark.Base
+
 open ShaderTools
 
 module Shape =
@@ -98,6 +99,7 @@ module Game =
             |> Tool.print []
             
         printfn "%s" shaderCode
+        //fshade prepends vertex and fragment ifdef allowing you to use the same code for both
         let vertexCode = shaderCode.Replace("#version 450","#version 450\n#define Vertex")
         let fragmentCode = shaderCode.Replace("#version 450","#version 450\n#define Fragment")
 
@@ -106,46 +108,46 @@ module Game =
         let shaders =  factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
 
         let pipelineDescription =
-            let mutable pipelineDescription = GraphicsPipelineDescription()
-            pipelineDescription.BlendState <- BlendStateDescription.SingleOverrideBlend
-            pipelineDescription.DepthStencilState <- DepthStencilStateDescription(
+            let mutable pd = GraphicsPipelineDescription()
+            pd.BlendState <- BlendStateDescription.SingleOverrideBlend
+            pd.DepthStencilState <- DepthStencilStateDescription(
                 depthTestEnabled= true,
                 depthWriteEnabled= true,
                 comparisonKind= ComparisonKind.LessEqual)
-            pipelineDescription.RasterizerState <- RasterizerStateDescription(
+            pd.RasterizerState <- RasterizerStateDescription(
                 cullMode= FaceCullMode.Back,
                 fillMode= PolygonFillMode.Solid,
                 frontFace= FrontFace.Clockwise,
                 depthClipEnabled= true,
                 scissorTestEnabled= false)
-            pipelineDescription.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
-            pipelineDescription.ResourceLayouts <- Array.empty<ResourceLayout>
-            pipelineDescription.ShaderSet <- ShaderSetDescription(
+            pd.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
+            pd.ResourceLayouts <- Array.empty<ResourceLayout>
+            pd.ShaderSet <- ShaderSetDescription(
                 vertexLayouts =  [|vertexLayout|] ,
                 shaders = shaders )
             
-            pipelineDescription.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
-            pipelineDescription
+            pd.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
+            pd
 
         let pipeline = factory.CreateGraphicsPipeline pipelineDescription
-        let commandList = factory.CreateCommandList()
-        commandList, graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders, uint32 quadVerticies.Length
+        let commands = factory.CreateCommandList()
+        commands, graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders, uint32 quadVerticies.Length
 
-    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders, indexCount) = 
-        commandList.Begin()
-        commandList.SetFramebuffer graphicsDevice.SwapchainFramebuffer
-        commandList.ClearColorTarget (0u, RgbaFloat.Black)
-        commandList.SetVertexBuffer (0u, vertexBuffer)
-        commandList.SetIndexBuffer (indexBuffer, IndexFormat.UInt16)
-        commandList.SetPipeline (pipeline)
-        commandList.DrawIndexed(
+    let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders, indexCount) = 
+        commands.Begin()
+        commands.SetFramebuffer graphicsDevice.SwapchainFramebuffer
+        commands.ClearColorTarget (0u, RgbaFloat.Black)
+        commands.SetVertexBuffer (0u, vertexBuffer)
+        commands.SetIndexBuffer (indexBuffer, IndexFormat.UInt16)
+        commands.SetPipeline (pipeline)
+        commands.DrawIndexed(
             indexCount    = indexCount,
             instanceCount = 1u,
             indexStart    = 0u,
             vertexOffset  = 0,
             instanceStart = 0u)
-        commandList.End()
-        graphicsDevice.SubmitCommands(commandList)
+        commands.End()
+        graphicsDevice.SubmitCommands(commands)
         graphicsDevice.SwapBuffers()
         ()
 
@@ -157,9 +159,9 @@ let main argv =
     while window.Exists do
         window.PumpEvents() |> ignore
         do Game.Draw props
-    let (commandList, graphicsDevice , vertexBuffer, indexBuffer, pipeline, shaders, _) = props    
+    let (commands, graphicsDevice , vertexBuffer, indexBuffer, pipeline, shaders, _) = props    
     let dispose () =
-        commandList.Dispose()
+        commands.Dispose()
         graphicsDevice.Dispose()
         vertexBuffer.Dispose()
         indexBuffer.Dispose()
