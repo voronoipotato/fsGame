@@ -4,7 +4,8 @@
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.fs" />
+    <Compile Include="src/ShaderTools.fs" />
+    <Compile Include="src/Program.fs" />
     <Content Include="fragmentShader.glsl" />
     <Content Include="vertexShader.glsl" />
   </ItemGroup>
