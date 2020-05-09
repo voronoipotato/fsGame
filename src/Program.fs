@@ -97,9 +97,11 @@ module Game =
     //this are some dirty quads to get something to show to the screen. They probably aren't "right"
     let createScene tick = 
         let t = float32 (tick % 2000L) / 2000.f
-        let grayRect  = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
-        let blueRect  = Shape.square (Vector2(0.0f)) t RgbaFloat.CornflowerBlue
-        let redRect   = Shape.square (Vector2(t,t)) 0.5f RgbaFloat.DarkRed
+        let origin2d = Vector2(0.0f)
+        let grayRect  = Shape.rectangle origin2d 1.75f 0.85f RgbaFloat.LightGrey
+        let blueRect  = Shape.square origin2d t RgbaFloat.CornflowerBlue
+        let squarePosition = Vector2(t,t)
+        let redRect   = Shape.square squarePosition 0.5f RgbaFloat.DarkRed
         [|
             yield! grayRect
             yield! redRect
@@ -110,11 +112,10 @@ module Game =
         let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
         let factory = graphicsDevice.ResourceFactory
 
-        let createBuffers = createBuffers graphicsDevice factory
-        let quadVerticies = createScene (Environment.TickCount64)
-            
+        let (vertexBuffer, indexBuffer) = 
+            let quadVerticies = createScene (Environment.TickCount64)
+            createBuffers graphicsDevice factory quadVerticies
 
-        let (vertexBuffer, indexBuffer) = createBuffers quadVerticies
         let vertexLayout = 
             let color = VertexElementDescription("Colors", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             let position = VertexElementDescription("Positions", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
@@ -124,19 +125,20 @@ module Game =
             fragment {
                 return v
             }
-
-        let shaderCode = 
-            fragmentShader
-            |> Effect.ofFunction 
-            |> Tool.print []
         
         //fshade prepends vertex and fragment ifdef allowing you to use the same code for both
-        let vertexCode = shaderCode.Replace("#version 450","#version 450\n#define Vertex")
-        let fragmentCode = shaderCode.Replace("#version 450","#version 450\n#define Fragment")
-        let getShaderDesc (s: ShaderStages) (c: string) = ShaderDescription(s, Encoding.UTF8.GetBytes(c), "main")
-        let vertexShaderDesc = getShaderDesc ShaderStages.Vertex vertexCode
-        let fragmentShaderDesc = getShaderDesc ShaderStages.Fragment fragmentCode
-        let shaders =  factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
+
+        let shaders =  
+            let shaderCode = 
+                fragmentShader
+                |> Effect.ofFunction 
+                |> Tool.print []
+            let vertexCode = shaderCode.Replace("#version 450","#version 450\n#define Vertex")
+            let fragmentCode = shaderCode.Replace("#version 450","#version 450\n#define Fragment")
+            let getShaderDesc (s: ShaderStages) (c: string) = ShaderDescription(s, Encoding.UTF8.GetBytes(c), "main")
+            let vertexShaderDesc = getShaderDesc ShaderStages.Vertex vertexCode
+            let fragmentShaderDesc = getShaderDesc ShaderStages.Fragment fragmentCode
+            factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
 
         let pipelineDescription = getPipelineDescription vertexLayout shaders graphicsDevice
 
