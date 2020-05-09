@@ -40,10 +40,10 @@ module VeldridTools =
         wci.WindowHeight <- 960
         wci.WindowTitle  <- title
         wci
-
+    let toIndex a =  a |> Array.mapi (fun i _ -> uint16(i) )
     let createBuffers (graphicsDevice: GraphicsDevice) (factory: ResourceFactory) quadVerticies =
             let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
-            let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
+            let quadIndicies : uint16[] = quadVerticies |> toIndex
             let vertexBuffer = BufferDescription(getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
             do graphicsDevice.UpdateBuffer (vertexBuffer, 0u, quadVerticies)
@@ -51,7 +51,7 @@ module VeldridTools =
             (vertexBuffer, indexBuffer)
 
     let updateBuffers (graphicsDevice: GraphicsDevice) vertexBuffer indexBuffer quadVerticies = 
-        let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
+        let quadIndicies : uint16[] = quadVerticies |> toIndex
         do graphicsDevice.UpdateBuffer(vertexBuffer, 0u, quadVerticies)
         do graphicsDevice.UpdateBuffer(indexBuffer, 0u, quadIndicies)
 
