@@ -16,20 +16,17 @@ module Shape =
     let rectangle position width height (color: RgbaFloat) =
         let dimensions = Vector2(width, height) / Vector2(2.f)
         let format =
-            [
-                (1.f, -1.f)
-                (1.f,  1.f)
-                (-1.f, 1.f)
+            [|
+                Vector2(1.f, -1.f)
+                Vector2(1.f,  1.f)
+                Vector2(-1.f, 1.f)
 
-                (-1.f, 1.f)
-                (-1.f,-1.f)
-                (1.f, -1.f)
-            ] |> Array.ofList
-        
-        Array.map ((fun (x,y) -> Vector2(x,y)) 
-                    >> ((*) dimensions ) 
-                    >> ((+) position) 
-                    >> (fun v-> (v,color))) format
+                Vector2(-1.f, 1.f)
+                Vector2(-1.f,-1.f)
+                Vector2(1.f, -1.f)
+            |]
+        format
+        |> Array.map (fun v -> (v * dimensions + position,color))
     let square position size color = rectangle position size size color
     
 
