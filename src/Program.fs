@@ -17,8 +17,11 @@ module Shape =
         let dimensions = Vector2(width, height) / Vector2(2.f)
         let format =
             [
-                (-1.f, 1.f)
+                (1.f, -1.f)
                 (1.f,  1.f)
+                (-1.f, 1.f)
+
+                (-1.f, 1.f)
                 (-1.f,-1.f)
                 (1.f, -1.f)
             ] |> Array.ofList
@@ -28,20 +31,10 @@ module Shape =
                     >> ((+) position) 
                     >> (fun v-> (v,color))) format
     let square position size color = rectangle position size size color
-
-
-module Game = 
-    type Frag = {[<Color>] c: V4d}
     
-    [<Struct>]
-    type Vertex = 
-        {
-            Color: RgbaFloat
-            Position: Vector4
-        }
-        
-    module Vertex= 
-        let from2D (position: Vector2, color) = {Position = Vector4(position, 0.f ,1.f); Color = color}
+
+module VeldridTools = 
+    let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
     let createWindow title = 
         let mutable wci = WindowCreateInfo()
         wci.X            <- 100
@@ -51,15 +44,8 @@ module Game =
         wci.WindowTitle  <- title
         wci
 
-    let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
-
-    let createResources window = 
-        let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
-        let factory = graphicsDevice.ResourceFactory
-
-        let createBuffers quadVerticies =
+    let createBuffers (graphicsDevice: GraphicsDevice) (factory: ResourceFactory) quadVerticies =
             let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
-
             let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
             let vertexBuffer = BufferDescription(getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
@@ -67,47 +53,12 @@ module Game =
             do graphicsDevice.UpdateBuffer (indexBuffer,  0u, quadIndicies)
             (vertexBuffer, indexBuffer)
 
-        let grayRect  = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
-        let blueRect  = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
-        let redRect   = Shape.square (Vector2(0.125f)) 0.5f RgbaFloat.DarkRed
-        let yellowRect = Shape.square (Vector2(0.25f)) 0.5f RgbaFloat.Yellow
+    let updateBuffers (graphicsDevice: GraphicsDevice) vertexBuffer indexBuffer quadVerticies = 
+        let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
+        do graphicsDevice.UpdateBuffer(vertexBuffer, 0u, quadVerticies)
+        do graphicsDevice.UpdateBuffer(indexBuffer, 0u, quadIndicies)
 
-        let quadVerticies = 
-            [|
-                yield! grayRect
-                yield! blueRect
-                yield! redRect
-                yield! yellowRect
-            |] |> Array.map Vertex.from2D
-
-        let (vertexBuffer, indexBuffer) = createBuffers quadVerticies
-        let vertexLayout = 
-            let position = VertexElementDescription("Positions", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
-            let color = VertexElementDescription("Colors", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
-            VertexLayoutDescription(color, position)
-
-        let getBytes (s : string) = Encoding.UTF8.GetBytes s
-
-        let fragmentShader (v: Frag)  = 
-            fragment {
-                return {c = v.c}
-            }
-
-        let shaderCode = 
-            fragmentShader
-            |> Effect.ofFunction 
-            |> Tool.print []
-            
-        printfn "%s" shaderCode
-        //fshade prepends vertex and fragment ifdef allowing you to use the same code for both
-        let vertexCode = shaderCode.Replace("#version 450","#version 450\n#define Vertex")
-        let fragmentCode = shaderCode.Replace("#version 450","#version 450\n#define Fragment")
-
-        let vertexShaderDesc = ShaderDescription(ShaderStages.Vertex, getBytes(vertexCode), "main")
-        let fragmentShaderDesc = ShaderDescription(ShaderStages.Fragment, getBytes(fragmentCode), "main")
-        let shaders =  factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
-
-        let pipelineDescription =
+    let getPipelineDescription vertexLayout shaders (graphicsDevice: GraphicsDevice) =
             let mutable pd = GraphicsPipelineDescription()
             pd.BlendState <- BlendStateDescription.SingleOverrideBlend
             pd.DepthStencilState <- DepthStencilStateDescription(
@@ -116,11 +67,11 @@ module Game =
                 comparisonKind= ComparisonKind.LessEqual)
             pd.RasterizerState <- RasterizerStateDescription(
                 cullMode= FaceCullMode.Back,
-                fillMode= PolygonFillMode.Solid,
+                fillMode= PolygonFillMode.Solid, 
                 frontFace= FrontFace.Clockwise,
                 depthClipEnabled= true,
                 scissorTestEnabled= false)
-            pd.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
+            pd.PrimitiveTopology <- PrimitiveTopology.TriangleList
             pd.ResourceLayouts <- Array.empty<ResourceLayout>
             pd.ShaderSet <- ShaderSetDescription(
                 vertexLayouts =  [|vertexLayout|] ,
@@ -129,11 +80,75 @@ module Game =
             pd.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
             pd
 
+module Game = 
+    open VeldridTools
+
+    type Frag = {[<Color>] c: V4d; [<Position>] p: V4d; [<FragCoord>] fc: V4d;}
+
+    [<Struct>]
+    type Vertex = 
+        {
+            Color: RgbaFloat
+            Position: Vector4
+        }
+    module Vertex= 
+        let from2D (position: Vector2, color) = {Position = Vector4(position, 0.f ,1.f); Color = color}
+
+    //this are some dirty quads to get something to show to the screen. They probably aren't "right"
+    let createScene tick = 
+        let t = float32 (tick % 2000L) / 2000.f
+        let grayRect  = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
+        let blueRect  = Shape.square (Vector2(0.0f)) t RgbaFloat.CornflowerBlue
+        let redRect   = Shape.square (Vector2(t,t)) 0.5f RgbaFloat.DarkRed
+        [|
+            yield! grayRect
+            yield! redRect
+            yield! blueRect
+        |] |> Array.map Vertex.from2D
+
+    let createResources window = 
+        let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
+        let factory = graphicsDevice.ResourceFactory
+
+        let createBuffers = createBuffers graphicsDevice factory
+        let quadVerticies = createScene (Environment.TickCount64)
+            
+
+        let (vertexBuffer, indexBuffer) = createBuffers quadVerticies
+        let vertexLayout = 
+            let color = VertexElementDescription("Colors", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
+            let position = VertexElementDescription("Positions", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
+            VertexLayoutDescription(color, position)
+
+        let fragmentShader (v: Frag)  = 
+            fragment {
+                return v
+            }
+
+        let shaderCode = 
+            fragmentShader
+            |> Effect.ofFunction 
+            |> Tool.print []
+        
+        //fshade prepends vertex and fragment ifdef allowing you to use the same code for both
+        let vertexCode = shaderCode.Replace("#version 450","#version 450\n#define Vertex")
+        let fragmentCode = shaderCode.Replace("#version 450","#version 450\n#define Fragment")
+        let getShaderDesc (s: ShaderStages) (c: string) = ShaderDescription(s, Encoding.UTF8.GetBytes(c), "main")
+        let vertexShaderDesc = getShaderDesc ShaderStages.Vertex vertexCode
+        let fragmentShaderDesc = getShaderDesc ShaderStages.Fragment fragmentCode
+        let shaders =  factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
+
+        let pipelineDescription = getPipelineDescription vertexLayout shaders graphicsDevice
+
         let pipeline = factory.CreateGraphicsPipeline pipelineDescription
         let commands = factory.CreateCommandList()
-        commands, graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders, uint32 quadVerticies.Length
+        commands, graphicsDevice, pipeline, shaders, vertexBuffer, indexBuffer
 
-    let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders, indexCount) = 
+    let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, pipeline:Pipeline, shaders, vertexBuffer, indexBuffer) = 
+        let quadVerticies = (createScene Environment.TickCount64)
+        let indexCount = uint32 quadVerticies.Length
+        
+        do updateBuffers graphicsDevice vertexBuffer indexBuffer quadVerticies
         commands.Begin()
         commands.SetFramebuffer graphicsDevice.SwapchainFramebuffer
         commands.ClearColorTarget (0u, RgbaFloat.Black)
@@ -153,13 +168,13 @@ module Game =
 
 [<EntryPoint>]
 let main argv =
-    let wci = Game.createWindow "veldridGame"
+    let wci = VeldridTools.createWindow "veldridGame"
     let window = VeldridStartup.CreateWindow(ref wci)
     let props = Game.createResources window
     while window.Exists do
         window.PumpEvents() |> ignore
         do Game.Draw props
-    let (commands, graphicsDevice , vertexBuffer, indexBuffer, pipeline, shaders, _) = props    
+    let (commands, graphicsDevice , pipeline, shaders, vertexBuffer, indexBuffer) = props    
     let dispose () =
         commands.Dispose()
         graphicsDevice.Dispose()
