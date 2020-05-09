@@ -34,10 +34,10 @@ module VeldridTools =
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
     let createWindow title = 
         let mutable wci = WindowCreateInfo()
-        wci.X            <- 100
-        wci.Y            <- 100
-        wci.WindowWidth  <- 960
-        wci.WindowHeight <- 960
+        wci.X <- 100
+        wci.Y <- 100
+        wci.WindowWidth  <- 400
+        wci.WindowHeight <- 400
         wci.WindowTitle  <- title
         wci
     let toIndex a =  a |> Array.mapi (fun i _ -> uint16(i) )
