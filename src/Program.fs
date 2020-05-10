@@ -27,8 +27,59 @@ module Shape =
             |]
         format
         |> Array.map (fun v -> (v * dimensions + position,color))
+    
     let square position size color = rectangle position size size color
     
+    let cube = 
+        [| 
+            Vector3(-1.0f,-1.0f,-1.0f) // triangle 1 : begin
+            Vector3(-1.0f,-1.0f, 1.0f)
+            Vector3(-1.0f, 1.0f, 1.0f) // triangle 1 : end
+
+            Vector3(1.0f, 1.0f,-1.0f) // triangle 2 : begin
+            Vector3(-1.0f,-1.0f,-1.0f)
+            Vector3(-1.0f, 1.0f,-1.0f) // triangle 2 : end
+
+            Vector3(1.0f,-1.0f, 1.0f)
+            Vector3(-1.0f,-1.0f,-1.0f)
+            Vector3(1.0f,-1.0f,-1.0f)
+
+            Vector3(1.0f, 1.0f,-1.0f)
+            Vector3(1.0f,-1.0f,-1.0f)
+            Vector3(-1.0f,-1.0f,-1.0f)
+
+            Vector3(-1.0f,-1.0f,-1.0f)
+            Vector3(-1.0f, 1.0f, 1.0f)
+            Vector3(-1.0f, 1.0f,-1.0f)
+
+            Vector3(1.0f,-1.0f, 1.0f)
+            Vector3(-1.0f,-1.0f, 1.0f)
+            Vector3(-1.0f,-1.0f,-1.0f)
+
+            Vector3(-1.0f, 1.0f, 1.0f)
+            Vector3(-1.0f,-1.0f, 1.0f)
+            Vector3(1.0f,-1.0f, 1.0f)
+
+            Vector3(1.0f, 1.0f, 1.0f)
+            Vector3(1.0f,-1.0f,-1.0f)
+            Vector3(1.0f, 1.0f,-1.0f)
+
+            Vector3(1.0f,-1.0f,-1.0f)
+            Vector3(1.0f, 1.0f, 1.0f)
+            Vector3(1.0f,-1.0f, 1.0f)
+
+            Vector3(1.0f, 1.0f, 1.0f)
+            Vector3(1.0f, 1.0f,-1.0f)
+            Vector3(-1.0f, 1.0f,-1.0f)
+
+            Vector3(1.0f, 1.0f, 1.0f)
+            Vector3(-1.0f, 1.0f,-1.0f)
+            Vector3(-1.0f, 1.0f, 1.0f)
+
+            Vector3(1.0f, 1.0f, 1.0f)
+            Vector3(-1.0f, 1.0f, 1.0f)
+            Vector3(1.0f,-1.0f, 1.0f)
+        |]
 
 module VeldridTools = 
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
@@ -61,10 +112,10 @@ module VeldridTools =
             pd.DepthStencilState <- DepthStencilStateDescription(
                 depthTestEnabled= true,
                 depthWriteEnabled= true,
-                comparisonKind= ComparisonKind.LessEqual)
+                comparisonKind= ComparisonKind.LessEqual)            
             pd.RasterizerState <- RasterizerStateDescription(
                 cullMode= FaceCullMode.Back,
-                fillMode= PolygonFillMode.Solid, 
+                fillMode= PolygonFillMode.Wireframe, 
                 frontFace= FrontFace.Clockwise,
                 depthClipEnabled= true,
                 scissorTestEnabled= false)
@@ -80,7 +131,7 @@ module VeldridTools =
 module Game = 
     open VeldridTools
 
-    type Frag = {[<Color>] c: V4d; [<Position>] p: V4d; [<FragCoord>] fc: V4d;}
+    type Frag = {[<Color>] Color: V4d; [<Position>] Position: V4d; [<FragCoord>] FragCoord: V4d;}
 
     [<Struct>]
     type Vertex = 
@@ -90,20 +141,20 @@ module Game =
         }
     module Vertex= 
         let from2D (position: Vector2, color) = {Position = Vector4(position, 0.f ,1.f); Color = color}
+        let from3D (position: Vector3, color) = {Position = Vector4(position, 1.f); Color = color}
 
     //this are some dirty quads to get something to show to the screen. They probably aren't "right"
     let createScene tick = 
         let t = float32 (tick % 2000L) / 2000.f
-        let origin2d = Vector2(0.0f)
-        let grayRect  = Shape.rectangle origin2d 1.75f 0.85f RgbaFloat.LightGrey
-        let blueRect  = Shape.square origin2d t RgbaFloat.CornflowerBlue
-        let squarePosition = Vector2(t,t)
-        let redRect   = Shape.square squarePosition 0.5f RgbaFloat.DarkRed
-        [|
-            yield! grayRect
-            yield! redRect
-            yield! blueRect
-        |] |> Array.map Vertex.from2D
+        let c (p: Vector3)  = RgbaFloat( RgbaFloat.DarkRed.ToVector4() * Vector4(abs(p)*2.f, 1.f))
+        let scale (p: Vector3) = p * 0.2f
+        let rotate (p: Vector3) = Vector3.Transform(p, Quaternion(sin(t), sin(t),cos(t),cos(t)))
+        let paint (p: Vector3) = (p, (c p))
+        let cube = 
+            Shape.cube 
+            |> Array.map ( scale >> rotate >> paint )
+        [| yield! cube |]
+        |> Array.map Vertex.from3D
 
     let createResources window = 
         let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
@@ -148,6 +199,7 @@ module Game =
         let indexCount = uint32 quadVerticies.Length
         
         do updateBuffers graphicsDevice vertexBuffer indexBuffer quadVerticies
+        
         commands.Begin()
         commands.SetFramebuffer graphicsDevice.SwapchainFramebuffer
         commands.ClearColorTarget (0u, RgbaFloat.Black)
