@@ -145,10 +145,13 @@ module Game =
 
     //this are some dirty quads to get something to show to the screen. They probably aren't "right"
     let createScene tick = 
-        let t = float32 (tick % 2000L) / 2000.f
-        let c (p: Vector3)  = RgbaFloat( RgbaFloat.DarkRed.ToVector4() * Vector4(abs(p)*2.f, 1.f))
+        let t = float32 (tick ) / 2000.f
+        let c (p: Vector3)  = RgbaFloat( RgbaFloat.DarkRed.ToVector4() * Vector4(abs(p)*5.f, 1.f))
         let scale (p: Vector3) = p * 0.2f
-        let rotate (p: Vector3) = Vector3.Transform(p, Quaternion(sin(t), sin(t),cos(t),cos(t)))
+        //This is not how you do this, FOR MANY REASONS.
+        let rotate (p: Vector3) = 
+            let rotateX = Vector3.Transform(p, Quaternion(0.f, cos(t),0.f,sin(t)))
+            Vector3.Transform( rotateX, Quaternion(0.f,0.f,cos(t),sin(t)))
         let paint (p: Vector3) = (p, (c p))
         let cube = 
             Shape.cube 
