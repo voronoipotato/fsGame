@@ -143,19 +143,22 @@ module Game =
         let from2D (position: Vector2, color) = {Position = Vector4(position, 0.f ,1.f); Color = color}
         let from3D (position: Vector3, color) = {Position = Vector4(position, 1.f); Color = color}
 
-    //this are some dirty quads to get something to show to the screen. They probably aren't "right"
+    //TODO: Replace with model loading
     let createScene tick = 
         let t = float32 (tick ) / 2000.f
-        let c (p: Vector3)  = RgbaFloat( RgbaFloat.DarkRed.ToVector4() * Vector4(abs(p)*5.f, 1.f))
-        let scale (p: Vector3) = p * 0.2f
-        //This is not how you do this, FOR MANY REASONS.
-        let rotate (p: Vector3) = 
-            let rotateX = Vector3.Transform(p, Quaternion(0.f, cos(t),0.f,sin(t)))
-            Vector3.Transform( rotateX, Quaternion(0.f,0.f,cos(t),sin(t)))
-        let paint (p: Vector3) = (p, (c p))
+
         let cube = 
-            Shape.cube 
-            |> Array.map ( scale >> rotate >> paint )
+            let scale (p: Vector3) = p * 0.2f
+            //TODO: move to the world matrix
+            let rotate (p: Vector3) = 
+                let transform (q: Quaternion) (p: Vector3)  = Vector3.Transform(p, q)
+                p 
+                |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
+                |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
+            let paint (p: Vector3) = 
+                (p, RgbaFloat( RgbaFloat.DarkRed.ToVector4() * Vector4(abs(p)*5.f, 1.f)))
+            Shape.cube |> Array.map ( scale >> rotate >> paint )
+        
         [| yield! cube |]
         |> Array.map Vertex.from3D
 
@@ -168,8 +171,9 @@ module Game =
             createBuffers graphicsDevice factory quadVerticies
 
         let vertexLayout = 
-            let color = VertexElementDescription("Colors", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
-            let position = VertexElementDescription("Positions", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
+            let makeVED s = VertexElementDescription(s, VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
+            let color = makeVED "Colors"
+            let position = makeVED "Positions"
             VertexLayoutDescription(color, position)
 
         let fragmentShader (v: Frag)  = 

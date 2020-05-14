@@ -30,7 +30,7 @@ module Tool =
                         outputs         = Map.union existing additional 
                     }
 
-                let glsl410 =
+                let glsl450 =
                     GLSL.Backend.Create {
                         version                 = System.Version(4,5)
                         enabledExtensions       = Set.ofList [ ]
@@ -47,7 +47,7 @@ module Tool =
                     effect
                         // compile the thing
                         |> Effect.toModule config
-                        |> ModuleCompiler.compileGLSL glsl410
+                        |> ModuleCompiler.compileGLSL glsl450
                         
                 
                 sprintf "%s" glsl.code
