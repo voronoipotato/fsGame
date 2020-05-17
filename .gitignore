@@ -74,6 +74,8 @@ _[Dd]eploy/
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
 
+.ionide/symbolCache.db
+
 # NUNIT
 *.VisualState.xml
 TestResult.xml
