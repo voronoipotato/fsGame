@@ -30,7 +30,8 @@ module Shape =
     
     let square position size color = rectangle position size size color
     
-    let cube = 
+    let prism position l w h = 
+        let dimensions = Vector3(l, w, h) / Vector3(2.f)
         [| 
             Vector3(-1.0f,-1.0f,-1.0f) // triangle 1 : begin
             Vector3(-1.0f,-1.0f, 1.0f)
@@ -79,7 +80,7 @@ module Shape =
             Vector3(1.0f, 1.0f, 1.0f)
             Vector3(-1.0f, 1.0f, 1.0f)
             Vector3(1.0f,-1.0f, 1.0f)
-        |]
+        |] |> Array.map (fun v -> v * dimensions + position)
 
 module VeldridTools = 
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
@@ -115,7 +116,7 @@ module VeldridTools =
                 comparisonKind= ComparisonKind.LessEqual)            
             pd.RasterizerState <- RasterizerStateDescription(
                 cullMode= FaceCullMode.Back,
-                fillMode= PolygonFillMode.Wireframe, 
+                fillMode= PolygonFillMode.Solid, 
                 frontFace= FrontFace.Clockwise,
                 depthClipEnabled= true,
                 scissorTestEnabled= false)
@@ -156,8 +157,10 @@ module Game =
                 |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
                 |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
             let paint (p: Vector3) = 
-                (p, RgbaFloat( RgbaFloat.DarkRed.ToVector4() * Vector4(abs(p)*5.f, 1.f)))
-            Shape.cube |> Array.map ( scale >> rotate >> paint )
+                (p,  RgbaFloat.DarkRed)
+            let p1 = (Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
+        
+            [| yield! p1; |]|> Array.map ( scale >> rotate >> paint )
         
         [| yield! cube |]
         |> Array.map Vertex.from3D
@@ -175,7 +178,7 @@ module Game =
             let color = makeVED "Colors"
             let position = makeVED "Positions"
             VertexLayoutDescription(color, position)
-
+   
         let fragmentShader (v: Frag)  = 
             fragment {
                 return v
