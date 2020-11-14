@@ -28,6 +28,8 @@ module Game =
     [<Struct>]
     type Vertex = 
         {Position: Vector2; Color: RgbaFloat}
+    type Buffers =
+        {Projection: DeviceBuffer; View: DeviceBuffer; World: DeviceBuffer; Vertex:DeviceBuffer; Index: DeviceBuffer }
     module Vertex= 
         let create (position, color) = {Position = position; Color = color}
     let createWindow title = 
@@ -44,16 +46,22 @@ module Game =
     let createResources window = 
         let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
         let factory = graphicsDevice.ResourceFactory
-        let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
 
         let createBuffers quadVerticies =
+            let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
+
             let quadVerticies = quadVerticies |> Array.map Vertex.create
             let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
             let vertexBuffer = BufferDescription( getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
             do graphicsDevice.UpdateBuffer (vertexBuffer, 0u, quadVerticies)
             do graphicsDevice.UpdateBuffer (indexBuffer,  0u, quadIndicies)
-            (vertexBuffer, indexBuffer)
+            {   Projection = vertexBuffer
+                View = vertexBuffer
+                World = vertexBuffer
+                Vertex = vertexBuffer
+                Index = indexBuffer} 
+            //(vertexBuffer, indexBuffer)
 
         let grayRect = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
         let blueRect = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
@@ -67,7 +75,8 @@ module Game =
             yield! yellowRect
             |]
 
-        let (vertexBuffer, indexBuffer) = createBuffers quadVerticies
+        let buffers = createBuffers quadVerticies
+        let  {Vertex = vertexBuffer ; Index=indexBuffer} = buffers
         let vertexLayout = 
             let position = VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2)
             let color = VertexElementDescription("Color", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
@@ -107,14 +116,14 @@ module Game =
 
         let pipeline = factory.CreateGraphicsPipeline pipelineDescription
         let commandList = factory.CreateCommandList()
-        commandList, graphicsDevice, vertexBuffer, indexBuffer, pipeline, shaders, uint32 quadVerticies.Length
+        commandList, graphicsDevice, buffers, pipeline, shaders, uint32 quadVerticies.Length
 
-    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, vertexBuffer:DeviceBuffer, indexBuffer:DeviceBuffer, pipeline:Pipeline, shaders, indexCount) = 
+    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, buffers, pipeline:Pipeline, shaders, indexCount) = 
         commandList.Begin()
         commandList.SetFramebuffer graphicsDevice.SwapchainFramebuffer
         commandList.ClearColorTarget (0u, RgbaFloat.Black)
-        commandList.SetVertexBuffer (0u, vertexBuffer)
-        commandList.SetIndexBuffer (indexBuffer, IndexFormat.UInt16)
+        commandList.SetVertexBuffer (0u, buffers.Vertex)
+        commandList.SetIndexBuffer (buffers.Index, IndexFormat.UInt16)
         commandList.SetPipeline (pipeline)
         commandList.DrawIndexed(
             indexCount    = indexCount,
@@ -135,12 +144,12 @@ let main argv =
     while window.Exists do
         window.PumpEvents() |> ignore
         do Game.Draw props
-    let (commandList, graphicsDevice , vertexBuffer, indexBuffer, pipeline, shaders, _) = props    
+    let (commandList, graphicsDevice , buffers, pipeline, shaders, _) = props    
     let dispose () =
         commandList.Dispose()
         graphicsDevice.Dispose()
-        vertexBuffer.Dispose()
-        indexBuffer.Dispose()
+        buffers.Vertex.Dispose()
+        buffers.Index.Dispose()
         pipeline.Dispose()
         shaders |> Array.iter(fun x -> x.Dispose())
         
