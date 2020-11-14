@@ -103,27 +103,31 @@ module Game =
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
     let createScene tick = 
         let t = float32 (tick ) / 2000.f
+        let scale (p: Vector3) = p * 0.2f
+        let paint  (c:RgbaFloat)(p: Vector3) = 
+                (p,  c)
         let cube = 
-            let scale (p: Vector3) = p * 0.2f
+            
             //TODO: move to the world matrix
             let rotate (p: Vector3) = 
                 let transform (q: Quaternion) (p: Vector3)  = Vector3.Transform(p, q)
                 p 
                 |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
                 |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
-            let paint (p: Vector3) = 
-                (p,  RgbaFloat.DarkRed)
+            
             let p1 = (Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
         
-            [| yield! p1; |]|> Array.map ( scale >> rotate >> paint )
+            p1 |> Array.map ( scale >> rotate >> paint RgbaFloat.DarkRed)
         
-        [| yield! cube |]
+        [| yield! cube 
+           yield! Shape.prism (Vector3(3.f,0.f,0.f)) 1.f 2.f 1.f |> Array.map (scale >> paint RgbaFloat.Grey)
+            |]
         |> Array.map Vertex.create
     let toIndex a =  a |> Array.mapi (fun i _ -> uint16(i) )
-    let updateBuffers  (graphicsDevice: GraphicsDevice) vertexBuffer indexBuffer quadVerticies = 
+    let updateBuffers  (graphicsDevice: GraphicsDevice) buffers quadVerticies = 
         let quadIndicies : uint16[] = quadVerticies |> toIndex
-        do graphicsDevice.UpdateBuffer(vertexBuffer, 0u, quadVerticies)
-        do graphicsDevice.UpdateBuffer(indexBuffer, 0u, quadIndicies)
+        do graphicsDevice.UpdateBuffer(buffers.Vertex, 0u, quadVerticies)
+        do graphicsDevice.UpdateBuffer(buffers.Index, 0u, quadIndicies)
     let createResources window = 
         let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
         let factory = graphicsDevice.ResourceFactory
@@ -191,7 +195,7 @@ module Game =
 
     let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, buffers, pipeline:Pipeline, shaders, indexCount) = 
         let quadVerticies = (createScene Environment.TickCount64)
-        do updateBuffers graphicsDevice buffers.Vertex buffers.Vertex quadVerticies
+        do updateBuffers graphicsDevice buffers quadVerticies
         commands.Begin()
         commands.SetFramebuffer graphicsDevice.SwapchainFramebuffer
         commands.ClearColorTarget (0u, RgbaFloat.CornflowerBlue)
