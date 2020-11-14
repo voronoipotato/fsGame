@@ -21,13 +21,98 @@ module Shape =
         Array.map ((fun (x,y) -> Vector2(x,y)) 
                     >> ((*) dimensions ) 
                     >> ((+) position) 
-                    >> (fun v-> (v,color))) format
+                    >> (fun v-> (Vector3(v,1.f),color))) format
     let square position size color = rectangle position size size color
+
+    let prism position l w h = 
+        let dimensions = Vector3(l, w, h)
+        [| 
+        Vector3(-1.0f,-1.0f,-1.0f) // triangle 1 : begin
+        Vector3(-1.0f,-1.0f, 1.0f)
+        Vector3(-1.0f, 1.0f, 1.0f) // triangle 1 : end
+
+        Vector3(1.0f, 1.0f,-1.0f) // triangle 2 : begin
+        Vector3(-1.0f,-1.0f,-1.0f)
+        Vector3(-1.0f, 1.0f,-1.0f) // triangle 2 : end
+
+        Vector3(1.0f,-1.0f, 1.0f)
+        Vector3(-1.0f,-1.0f,-1.0f)
+        Vector3(1.0f,-1.0f,-1.0f)
+
+        Vector3(1.0f, 1.0f,-1.0f)
+        Vector3(1.0f,-1.0f,-1.0f)
+        Vector3(-1.0f,-1.0f,-1.0f)
+
+        Vector3(-1.0f,-1.0f,-1.0f)
+        Vector3(-1.0f, 1.0f, 1.0f)
+        Vector3(-1.0f, 1.0f,-1.0f)
+
+        Vector3(1.0f,-1.0f, 1.0f)
+        Vector3(-1.0f,-1.0f, 1.0f)
+        Vector3(-1.0f,-1.0f,-1.0f)
+
+        Vector3(-1.0f, 1.0f, 1.0f)
+        Vector3(-1.0f,-1.0f, 1.0f)
+        Vector3(1.0f,-1.0f, 1.0f)
+
+        Vector3(1.0f, 1.0f, 1.0f)
+        Vector3(1.0f,-1.0f,-1.0f)
+        Vector3(1.0f, 1.0f,-1.0f)
+
+        Vector3(1.0f,-1.0f,-1.0f)
+        Vector3(1.0f, 1.0f, 1.0f)
+        Vector3(1.0f,-1.0f, 1.0f)
+
+        Vector3(1.0f, 1.0f, 1.0f)
+        Vector3(1.0f, 1.0f,-1.0f)
+        Vector3(-1.0f, 1.0f,-1.0f)
+
+        Vector3(1.0f, 1.0f, 1.0f)
+        Vector3(-1.0f, 1.0f,-1.0f)
+        Vector3(-1.0f, 1.0f, 1.0f)
+
+        Vector3(1.0f, 1.0f, 1.0f)
+        Vector3(-1.0f, 1.0f, 1.0f)
+        Vector3(1.0f,-1.0f, 1.0f)
+
+        // // front
+        // Vector3(0.0f, 0.0f, 0.0f)
+        // Vector3(1.0f, 0.0f, 0.0f)
+        // Vector3(1.0f, 1.0f, 0.0f)
+        // Vector3(0.0f, 1.0f, 0.0f)
+        // // back
+        // Vector3(0.0f, 0.0f, -1.0f)
+        // Vector3(1.0f, 0.0f, -1.0f)
+        // Vector3(1.0f, 1.0f, -1.0f)
+        // Vector3(0.0f, 1.0f, -1.0f)
+        // // right
+        // Vector3(1.0f, 0.0f, 0.0f)
+        // Vector3(1.0f, 0.0f, -1.0f)
+        // Vector3(1.0f, 1.0f, -1.0f)
+        // Vector3(1.0f, 1.0f, 0.0f)
+        // // left
+        // Vector3(0.0f, 0.0f, 0.0f)
+        // Vector3(0.0f, 0.0f, -1.0f)
+        // Vector3(0.0f, 1.0f, -1.0f)
+        // Vector3(0.0f, 1.0f, 0.0f)
+        // // top
+        // Vector3(0.0f, 1.0f, 0.0f)
+        // Vector3(1.0f, 1.0f, 0.0f)
+        // Vector3(1.0f, 1.0f, -1.0f)
+        // Vector3(0.0f, 1.0f, -1.0f)
+        // // bottom
+        // Vector3(0.0f, 0.0f, 0.0f)
+        // Vector3(1.0f, 0.0f, 0.0f)
+        // Vector3(1.0f, 0.0f, -1.0f)
+        // Vector3(0.0f, 0.0f, -1.0f)
+            
+        |] |> Array.map (fun v -> v * dimensions + position)
 
 module Game = 
     [<Struct>]
     type Vertex = 
-        {Position: Vector2; Color: RgbaFloat}
+        { Position: Vector4; Color: RgbaFloat;}
+    
     type Buffers =
         { Projection: DeviceBuffer
           View: DeviceBuffer
@@ -35,13 +120,13 @@ module Game =
           Vertex:DeviceBuffer
           Index: DeviceBuffer }
     module Vertex= 
-        let create (position, color) = {Position = position; Color = color}
+        let create (position: Vector3, color) = {Position = Vector4(position, 1.f); Color = color; }
     let createWindow title = 
         let mutable wci = WindowCreateInfo()
         wci.X            <- 100
         wci.Y            <- 100
-        wci.WindowWidth  <- 960
-        wci.WindowHeight <- 960
+        wci.WindowWidth  <- 400
+        wci.WindowHeight <- 400
         wci.WindowTitle  <- title
         wci
 
@@ -58,30 +143,44 @@ module Game =
             let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
             let vertexBuffer = BufferDescription( getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
+            let worldBuffer = BufferDescription(64u,BufferUsage.UniformBuffer) |> createBuffer
+            let viewBuffer = BufferDescription(64u,BufferUsage.UniformBuffer) |> createBuffer
+            let projectionBuffer = BufferDescription(64u,BufferUsage.UniformBuffer) |> createBuffer
             do graphicsDevice.UpdateBuffer (vertexBuffer, 0u, quadVerticies)
             do graphicsDevice.UpdateBuffer (indexBuffer,  0u, quadIndicies)
-            {   Projection = vertexBuffer
-                View = vertexBuffer
-                World = vertexBuffer
-                Vertex = vertexBuffer
-                Index = indexBuffer} 
-
+            {   World = worldBuffer      // Arrange the objects (or models, or avatar) in the world (Model Transformation or World transformation).
+                View = viewBuffer       // Position and orientation the camera (View transformation).
+                Projection = projectionBuffer // Select a camera lens (wide angle, normal or telescopic), adjust the focus length and zoom factor to set the camera's field of view (Projection transformation).
+                Vertex = vertexBuffer     // The verticies that you wish to render
+                Index = indexBuffer}      // The order in which verticies are rendered
+        
         let grayRect = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
         let blueRect = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
         let redRect = Shape.square (Vector2(0.125f)) 0.5f RgbaFloat.DarkRed
         let yellowRect = Shape.square (Vector2(0.25f)) 0.5f RgbaFloat.Yellow
+        let cube = 
+            let t = 700.4f
+            let scale (p: Vector3) = p * 0.2f
+            //TODO: move to the world matrix
+            let rotate (p: Vector3) = 
+                let transform (q: Quaternion) (p: Vector3)  = Vector3.Transform(p, q)
+                p 
+                |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
+                |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
+            let paint (p: Vector3) = 
+                (p,  RgbaFloat.CornflowerBlue)
+            let p1 = (Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
+        
+            p1 |> Array.map ( scale >> rotate >> paint )
 
-        let quadVerticies: (Vector2 * RgbaFloat) [] = [|
-            yield! grayRect
-            yield! blueRect
-            yield! redRect
-            yield! yellowRect
+        let quadVerticies: (Vector3 * RgbaFloat) [] = [|
+            yield! cube
             |]
 
         let buffers = createBuffers quadVerticies
         let  {Vertex = vertexBuffer ; Index=indexBuffer} = buffers
         let vertexLayout = 
-            let position = VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2)
+            let position = VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             let color = VertexElementDescription("Color", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             VertexLayoutDescription(position, color)
 
@@ -95,45 +194,45 @@ module Game =
         let shaders = factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
 
         let pipelineDescription =
-            let mutable pipelineDescription = GraphicsPipelineDescription()
-            pipelineDescription.BlendState <- BlendStateDescription.SingleOverrideBlend
-            pipelineDescription.DepthStencilState <- DepthStencilStateDescription(
+            let mutable pd = GraphicsPipelineDescription()
+            pd.BlendState <- BlendStateDescription.SingleOverrideBlend
+            pd.DepthStencilState <- DepthStencilStateDescription(
                 depthTestEnabled= true,
                 depthWriteEnabled= true,
                 comparisonKind= ComparisonKind.LessEqual)
-            pipelineDescription.RasterizerState <- RasterizerStateDescription(
-                cullMode= FaceCullMode.Back,
-                fillMode= PolygonFillMode.Solid,
+            pd.RasterizerState <- RasterizerStateDescription(
+                cullMode= FaceCullMode.None,
+                fillMode= PolygonFillMode.Wireframe,
                 frontFace= FrontFace.Clockwise,
-                depthClipEnabled= true,
+                depthClipEnabled= false,
                 scissorTestEnabled= false)
-            pipelineDescription.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
-            pipelineDescription.ResourceLayouts <- Array.empty<ResourceLayout>
-            pipelineDescription.ShaderSet <- ShaderSetDescription(
+            pd.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
+            pd.ResourceLayouts <- Array.empty<ResourceLayout>
+            pd.ShaderSet <- ShaderSetDescription(
                 vertexLayouts =  [|vertexLayout|] ,
                 shaders = shaders )
-            pipelineDescription.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
-            pipelineDescription
+            pd.Outputs <- graphicsDevice.SwapchainFramebuffer.OutputDescription
+            pd
 
         let pipeline = factory.CreateGraphicsPipeline pipelineDescription
         let commandList = factory.CreateCommandList()
         commandList, graphicsDevice, buffers, pipeline, shaders, uint32 quadVerticies.Length
 
-    let Draw (commandList: CommandList, graphicsDevice: GraphicsDevice, buffers, pipeline:Pipeline, shaders, indexCount) = 
-        commandList.Begin()
-        commandList.SetFramebuffer graphicsDevice.SwapchainFramebuffer
-        commandList.ClearColorTarget (0u, RgbaFloat.Black)
-        commandList.SetVertexBuffer (0u, buffers.Vertex)
-        commandList.SetIndexBuffer (buffers.Index, IndexFormat.UInt16)
-        commandList.SetPipeline (pipeline)
-        commandList.DrawIndexed(
+    let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, buffers, pipeline:Pipeline, shaders, indexCount) = 
+        commands.Begin()
+        commands.SetFramebuffer graphicsDevice.SwapchainFramebuffer
+        commands.ClearColorTarget (0u, RgbaFloat.Black)
+        commands.SetVertexBuffer (0u, buffers.Vertex)
+        commands.SetIndexBuffer (buffers.Index, IndexFormat.UInt16)
+        commands.SetPipeline (pipeline)
+        commands.DrawIndexed(
             indexCount    = indexCount,
             instanceCount = 1u,
             indexStart    = 0u,
             vertexOffset  = 0,
             instanceStart = 0u)
-        commandList.End()
-        graphicsDevice.SubmitCommands(commandList)
+        commands.End()
+        graphicsDevice.SubmitCommands(commands)
         graphicsDevice.SwapBuffers()
         ()
 
@@ -149,6 +248,9 @@ let main argv =
     let dispose () =
         commandList.Dispose()
         graphicsDevice.Dispose()
+        buffers.World.Dispose()
+        buffers.View.Dispose()
+        buffers.Projection.Dispose()
         buffers.Vertex.Dispose()
         buffers.Index.Dispose()
         pipeline.Dispose()
