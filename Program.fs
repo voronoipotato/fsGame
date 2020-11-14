@@ -29,7 +29,11 @@ module Game =
     type Vertex = 
         {Position: Vector2; Color: RgbaFloat}
     type Buffers =
-        {Projection: DeviceBuffer; View: DeviceBuffer; World: DeviceBuffer; Vertex:DeviceBuffer; Index: DeviceBuffer }
+        { Projection: DeviceBuffer
+          View: DeviceBuffer
+          World: DeviceBuffer
+          Vertex:DeviceBuffer
+          Index: DeviceBuffer }
     module Vertex= 
         let create (position, color) = {Position = position; Color = color}
     let createWindow title = 
@@ -61,7 +65,6 @@ module Game =
                 World = vertexBuffer
                 Vertex = vertexBuffer
                 Index = indexBuffer} 
-            //(vertexBuffer, indexBuffer)
 
         let grayRect = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
         let blueRect = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
@@ -83,14 +86,12 @@ module Game =
             VertexLayoutDescription(position, color)
 
         let getBytes (s : string) = Encoding.UTF8.GetBytes s
-        let vertexShaderDesc = 
-            let vertexCode = IO.File.ReadAllText("vertexShader.glsl")
-            ShaderDescription(ShaderStages.Vertex, getBytes(vertexCode), "main")
 
-        let fragmentShaderDesc =
-            let fragmentCode =  IO.File.ReadAllText("fragmentShader.glsl")
-            ShaderDescription(ShaderStages.Fragment, getBytes(fragmentCode), "main")
-
+        let createShaderDesc (stage:ShaderStages) (shader:string) = 
+            let shaderCode = IO.File.ReadAllText(shader)
+            ShaderDescription(stage, getBytes(shaderCode), "main")
+        let vertexShaderDesc = createShaderDesc ShaderStages.Vertex "vertexShader.glsl"
+        let fragmentShaderDesc = createShaderDesc ShaderStages.Fragment "fragmentShader.glsl"
         let shaders = factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
 
         let pipelineDescription =
