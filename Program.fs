@@ -75,36 +75,6 @@ module Shape =
         Vector3(-1.0f, 1.0f, 1.0f)
         Vector3(1.0f,-1.0f, 1.0f)
 
-        // // front
-        // Vector3(0.0f, 0.0f, 0.0f)
-        // Vector3(1.0f, 0.0f, 0.0f)
-        // Vector3(1.0f, 1.0f, 0.0f)
-        // Vector3(0.0f, 1.0f, 0.0f)
-        // // back
-        // Vector3(0.0f, 0.0f, -1.0f)
-        // Vector3(1.0f, 0.0f, -1.0f)
-        // Vector3(1.0f, 1.0f, -1.0f)
-        // Vector3(0.0f, 1.0f, -1.0f)
-        // // right
-        // Vector3(1.0f, 0.0f, 0.0f)
-        // Vector3(1.0f, 0.0f, -1.0f)
-        // Vector3(1.0f, 1.0f, -1.0f)
-        // Vector3(1.0f, 1.0f, 0.0f)
-        // // left
-        // Vector3(0.0f, 0.0f, 0.0f)
-        // Vector3(0.0f, 0.0f, -1.0f)
-        // Vector3(0.0f, 1.0f, -1.0f)
-        // Vector3(0.0f, 1.0f, 0.0f)
-        // // top
-        // Vector3(0.0f, 1.0f, 0.0f)
-        // Vector3(1.0f, 1.0f, 0.0f)
-        // Vector3(1.0f, 1.0f, -1.0f)
-        // Vector3(0.0f, 1.0f, -1.0f)
-        // // bottom
-        // Vector3(0.0f, 0.0f, 0.0f)
-        // Vector3(1.0f, 0.0f, 0.0f)
-        // Vector3(1.0f, 0.0f, -1.0f)
-        // Vector3(0.0f, 0.0f, -1.0f)
             
         |] |> Array.map (fun v -> v * dimensions + position)
 
@@ -131,7 +101,29 @@ module Game =
         wci
 
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
-
+    let createScene tick = 
+        let t = float32 (tick ) / 2000.f
+        let cube = 
+            let scale (p: Vector3) = p * 0.2f
+            //TODO: move to the world matrix
+            let rotate (p: Vector3) = 
+                let transform (q: Quaternion) (p: Vector3)  = Vector3.Transform(p, q)
+                p 
+                |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
+                |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
+            let paint (p: Vector3) = 
+                (p,  RgbaFloat.DarkRed)
+            let p1 = (Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
+        
+            [| yield! p1; |]|> Array.map ( scale >> rotate >> paint )
+        
+        [| yield! cube |]
+        |> Array.map Vertex.create
+    let toIndex a =  a |> Array.mapi (fun i _ -> uint16(i) )
+    let updateBuffers  (graphicsDevice: GraphicsDevice) vertexBuffer indexBuffer quadVerticies = 
+        let quadIndicies : uint16[] = quadVerticies |> toIndex
+        do graphicsDevice.UpdateBuffer(vertexBuffer, 0u, quadVerticies)
+        do graphicsDevice.UpdateBuffer(indexBuffer, 0u, quadIndicies)
     let createResources window = 
         let graphicsDevice = VeldridStartup.CreateGraphicsDevice(window)
         let factory = graphicsDevice.ResourceFactory
@@ -139,7 +131,7 @@ module Game =
         let createBuffers quadVerticies =
             let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
 
-            let quadVerticies = quadVerticies |> Array.map Vertex.create
+            
             let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
             let vertexBuffer = BufferDescription( getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
@@ -154,29 +146,8 @@ module Game =
                 Vertex = vertexBuffer     // The verticies that you wish to render
                 Index = indexBuffer}      // The order in which verticies are rendered
         
-        let grayRect = Shape.rectangle (Vector2(0.0f)) 1.75f 0.85f RgbaFloat.LightGrey
-        let blueRect = Shape.square (Vector2(0.0f)) 0.5f RgbaFloat.CornflowerBlue
-        let redRect = Shape.square (Vector2(0.125f)) 0.5f RgbaFloat.DarkRed
-        let yellowRect = Shape.square (Vector2(0.25f)) 0.5f RgbaFloat.Yellow
-        let cube = 
-            let t = 700.4f
-            let scale (p: Vector3) = p * 0.2f
-            //TODO: move to the world matrix
-            let rotate (p: Vector3) = 
-                let transform (q: Quaternion) (p: Vector3)  = Vector3.Transform(p, q)
-                p 
-                |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
-                |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
-            let paint (p: Vector3) = 
-                (p,  RgbaFloat.CornflowerBlue)
-            let p1 = (Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
-        
-            p1 |> Array.map ( scale >> rotate >> paint )
-
-        let quadVerticies: (Vector3 * RgbaFloat) [] = [|
-            yield! cube
-            |]
-
+   
+        let quadVerticies = createScene Environment.TickCount64
         let buffers = createBuffers quadVerticies
         let  {Vertex = vertexBuffer ; Index=indexBuffer} = buffers
         let vertexLayout = 
@@ -206,7 +177,7 @@ module Game =
                 frontFace= FrontFace.Clockwise,
                 depthClipEnabled= false,
                 scissorTestEnabled= false)
-            pd.PrimitiveTopology <- PrimitiveTopology.TriangleStrip
+            pd.PrimitiveTopology <- PrimitiveTopology.TriangleList
             pd.ResourceLayouts <- Array.empty<ResourceLayout>
             pd.ShaderSet <- ShaderSetDescription(
                 vertexLayouts =  [|vertexLayout|] ,
@@ -219,9 +190,11 @@ module Game =
         commandList, graphicsDevice, buffers, pipeline, shaders, uint32 quadVerticies.Length
 
     let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, buffers, pipeline:Pipeline, shaders, indexCount) = 
+        let quadVerticies = (createScene Environment.TickCount64)
+        do updateBuffers graphicsDevice buffers.Vertex buffers.Vertex quadVerticies
         commands.Begin()
         commands.SetFramebuffer graphicsDevice.SwapchainFramebuffer
-        commands.ClearColorTarget (0u, RgbaFloat.Black)
+        commands.ClearColorTarget (0u, RgbaFloat.CornflowerBlue)
         commands.SetVertexBuffer (0u, buffers.Vertex)
         commands.SetIndexBuffer (buffers.Index, IndexFormat.UInt16)
         commands.SetPipeline (pipeline)
