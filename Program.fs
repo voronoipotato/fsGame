@@ -3,9 +3,25 @@
 open System
 open Veldrid.StartupUtilities
 open System.Numerics
+open System.Collections.Generic
 open Veldrid
 open Veldrid.SPIRV
 open System.Text
+open System.IO
+
+module Stl = 
+    let import filename =
+        let tris = new List<Vector3>()
+        let mutable triangleCount = 0u
+        let readFile (s: BinaryReader) =
+            s.ReadBytes(80) |> ignore //header
+            triangleCount <- s.ReadUInt32() //number of triangles
+            s.ReadSingle() |> ignore //normal vector
+            for i in 1 .. (int triangleCount) do
+            tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore
+            ()
+        using (new BinaryReader(File.Open(filename, FileMode.Open))) readFile
+        failwith "Not Implemented"
 
 module Shape =
     let rectangle position width height (color: RgbaFloat) =
