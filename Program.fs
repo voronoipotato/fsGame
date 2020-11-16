@@ -16,12 +16,16 @@ module Stl =
         let readFile (s: BinaryReader) =
             s.ReadBytes(80) |> ignore //header
             triangleCount <- s.ReadUInt32() //number of triangles
-            s.ReadSingle() |> ignore //normal vector
+            
             for i in 1 .. (int triangleCount) do
-            tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore
+                Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle()) |> ignore //normal vector
+                tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore // Vertex 1
+                tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore // Vertex 2
+                tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore // Vertex 3
+                s.ReadBytes(2) |> ignore //information bits
             ()
         using (new BinaryReader(File.Open(filename, FileMode.Open))) readFile
-        failwith "Not Implemented"
+        tris.ToArray()
 
 module Shape =
     let rectangle position width height (color: RgbaFloat) =
@@ -119,25 +123,23 @@ module Game =
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
     let createScene tick = 
         let t = float32 (tick ) / 2000.f
-        let scale (p: Vector3) = p * 0.2f
-        let paint  (c:RgbaFloat)(p: Vector3) = 
-                (p,  c)
+        let scale (p: Vector3) = p * 0.01f
+        let paint  (c:RgbaFloat)(p: Vector3) = (p,  RgbaFloat(Vector4(p,1.f) ))
+        let rotate (p: Vector3) = 
+            let transform (q: Quaternion) (p: Vector3)  = Vector3.Transform(p, q)
+            p 
+            |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
+            |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
         let cube = 
             
             //TODO: move to the world matrix
-            let rotate (p: Vector3) = 
-                let transform (q: Quaternion) (p: Vector3)  = Vector3.Transform(p, q)
-                p 
-                |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
-                |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
+        
             
             let p1 = (Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
         
             p1 |> Array.map ( scale >> rotate >> paint RgbaFloat.DarkRed)
-        
-        [| yield! cube 
-           yield! Shape.prism (Vector3(3.f,0.f,0.f)) 1.f 2.f 1.f |> Array.map (scale >> paint RgbaFloat.Grey)
-            |]
+        let test = (Stl.import "test.stl") |> Array.map (scale >> rotate >> paint RgbaFloat.Blue)
+        [| yield!  test |]
         |> Array.map Vertex.create
     let toIndex a =  a |> Array.mapi (fun i _ -> uint16(i) )
     let updateBuffers  (graphicsDevice: GraphicsDevice) buffers quadVerticies = 
@@ -193,7 +195,7 @@ module Game =
                 comparisonKind= ComparisonKind.LessEqual)
             pd.RasterizerState <- RasterizerStateDescription(
                 cullMode= FaceCullMode.None,
-                fillMode= PolygonFillMode.Wireframe,
+                fillMode= PolygonFillMode.Solid,
                 frontFace= FrontFace.Clockwise,
                 depthClipEnabled= false,
                 scissorTestEnabled= false)
