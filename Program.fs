@@ -8,9 +8,11 @@ open Veldrid
 open Veldrid.SPIRV
 open System.Text
 open System.IO
+open Elmish
+open Veldrid.Sdl2
 
 module Stl = 
-    let import filename =
+    let read filename =
         let tris = new List<Vector3>()
         let mutable triangleCount = 0u
         let readFile (s: BinaryReader) =
@@ -27,76 +29,20 @@ module Stl =
         using (new BinaryReader(File.Open(filename, FileMode.Open))) readFile
         tris.ToArray()
 
-module Shape =
-    let rectangle position width height (color: RgbaFloat) =
-        let dimensions = Vector2(width, height) / Vector2(2.f)
-        let format =
-            [
-                (-1.f, 1.f)
-                (1.f,  1.f)
-                (-1.f,-1.f)
-                (1.f, -1.f)
-            ] |> Array.ofList
-        
-        Array.map ((fun (x,y) -> Vector2(x,y)) 
-                    >> ((*) dimensions ) 
-                    >> ((+) position) 
-                    >> (fun v-> (Vector3(v,1.f),color))) format
-    let square position size color = rectangle position size size color
 
-    let prism position l w h = 
-        let dimensions = Vector3(l, w, h)
-        [| 
-        Vector3(-1.0f,-1.0f,-1.0f) // triangle 1 : begin
-        Vector3(-1.0f,-1.0f, 1.0f)
-        Vector3(-1.0f, 1.0f, 1.0f) // triangle 1 : end
+module Program =
+    let withVeldrid program: Program<_,_,_,_> =
+        let setState model dispatch =
+            let el = (Program.view program) model dispatch
+            let rec setState' el =
+                match el with
+                | Volumetric.Scene (s,e) -> e |> List.iter setState'
+                | Volumetric.Model (x,e) -> e |> List.iter setState'
+                //| PlayerInput (f) -> ()
+            setState' el
+            ()
+        program |> Program.withSetState setState
 
-        Vector3(1.0f, 1.0f,-1.0f) // triangle 2 : begin
-        Vector3(-1.0f,-1.0f,-1.0f)
-        Vector3(-1.0f, 1.0f,-1.0f) // triangle 2 : end
-
-        Vector3(1.0f,-1.0f, 1.0f)
-        Vector3(-1.0f,-1.0f,-1.0f)
-        Vector3(1.0f,-1.0f,-1.0f)
-
-        Vector3(1.0f, 1.0f,-1.0f)
-        Vector3(1.0f,-1.0f,-1.0f)
-        Vector3(-1.0f,-1.0f,-1.0f)
-
-        Vector3(-1.0f,-1.0f,-1.0f)
-        Vector3(-1.0f, 1.0f, 1.0f)
-        Vector3(-1.0f, 1.0f,-1.0f)
-
-        Vector3(1.0f,-1.0f, 1.0f)
-        Vector3(-1.0f,-1.0f, 1.0f)
-        Vector3(-1.0f,-1.0f,-1.0f)
-
-        Vector3(-1.0f, 1.0f, 1.0f)
-        Vector3(-1.0f,-1.0f, 1.0f)
-        Vector3(1.0f,-1.0f, 1.0f)
-
-        Vector3(1.0f, 1.0f, 1.0f)
-        Vector3(1.0f,-1.0f,-1.0f)
-        Vector3(1.0f, 1.0f,-1.0f)
-
-        Vector3(1.0f,-1.0f,-1.0f)
-        Vector3(1.0f, 1.0f, 1.0f)
-        Vector3(1.0f,-1.0f, 1.0f)
-
-        Vector3(1.0f, 1.0f, 1.0f)
-        Vector3(1.0f, 1.0f,-1.0f)
-        Vector3(-1.0f, 1.0f,-1.0f)
-
-        Vector3(1.0f, 1.0f, 1.0f)
-        Vector3(-1.0f, 1.0f,-1.0f)
-        Vector3(-1.0f, 1.0f, 1.0f)
-
-        Vector3(1.0f, 1.0f, 1.0f)
-        Vector3(-1.0f, 1.0f, 1.0f)
-        Vector3(1.0f,-1.0f, 1.0f)
-
-            
-        |] |> Array.map (fun v -> v * dimensions + position)
 
 module Game = 
     [<Struct>]
@@ -135,12 +81,13 @@ module Game =
             //TODO: move to the world matrix
         
             
-            let p1 = (Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
+            let p1 = (Volumetric.Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
         
             p1 |> Array.map ( scale >> rotate >> paint RgbaFloat.DarkRed)
-        let test = (Stl.import "test.stl") |> Array.map (scale >> rotate >> paint RgbaFloat.Blue)
+        let test = (Stl.read "test.stl") |> Array.map (scale >> rotate >> paint RgbaFloat.Blue)
         [| yield!  test |]
         |> Array.map Vertex.create
+
     let toIndex a =  a |> Array.mapi (fun i _ -> uint16(i) )
     let updateBuffers  (graphicsDevice: GraphicsDevice) buffers quadVerticies = 
         let quadIndicies : uint16[] = quadVerticies |> toIndex
@@ -211,7 +158,7 @@ module Game =
         let commandList = factory.CreateCommandList()
         commandList, graphicsDevice, buffers, pipeline, shaders, uint32 quadVerticies.Length
 
-    let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, buffers, pipeline:Pipeline, shaders, indexCount) = 
+    let Draw (commands: CommandList, graphicsDevice: GraphicsDevice, buffers, pipeline:Pipeline, shaders, indexCount) snapshot = 
         let quadVerticies = (createScene Environment.TickCount64)
         do updateBuffers graphicsDevice buffers quadVerticies
         commands.Begin()
@@ -237,8 +184,8 @@ let main argv =
     let window = VeldridStartup.CreateWindow(ref wci)
     let props = Game.createResources window
     while window.Exists do
-        window.PumpEvents() |> ignore
-        do Game.Draw props
+        let snapshot = window.PumpEvents()
+        do Game.Draw props snapshot
     let (commandList, graphicsDevice , buffers, pipeline, shaders, _) = props    
     let dispose () =
         commandList.Dispose()
