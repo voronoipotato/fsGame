@@ -11,25 +11,6 @@ open System.IO
 open Elmish
 open Veldrid.Sdl2
 
-module Stl = 
-    let read filename =
-        let tris = new List<Vector3>()
-        let mutable triangleCount = 0u
-        let readFile (s: BinaryReader) =
-            s.ReadBytes(80) |> ignore //header
-            triangleCount <- s.ReadUInt32() //number of triangles
-            
-            for i in 1 .. (int triangleCount) do
-                Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle()) |> ignore //normal vector
-                tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore // Vertex 1
-                tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore // Vertex 2
-                tris.Add(Vector3(s.ReadSingle(), s.ReadSingle(), s.ReadSingle())) |> ignore // Vertex 3
-                s.ReadBytes(2) |> ignore //information bits
-            ()
-        using (new BinaryReader(File.Open(filename, FileMode.Open))) readFile
-        tris.ToArray()
-
-
 module Program =
     let withVeldrid program: Program<_,_,_,_> =
         let setState model dispatch =
@@ -42,7 +23,6 @@ module Program =
             setState' el
             ()
         program |> Program.withSetState setState
-
 
 module Game = 
     [<Struct>]
@@ -57,15 +37,6 @@ module Game =
           Index: DeviceBuffer }
     module Vertex= 
         let create (position: Vector3, color) = {Position = Vector4(position, 1.f); Color = color; }
-    let createWindow title = 
-        let mutable wci = WindowCreateInfo()
-        wci.X            <- 100
-        wci.Y            <- 100
-        wci.WindowWidth  <- 400
-        wci.WindowHeight <- 400
-        wci.WindowTitle  <- title
-        wci
-
     let inline getSize (t: 't[]) : uint32 = sizeof<'t> * t.Length |> uint32
     let createScene tick = 
         let t = float32 (tick ) / 2000.f
@@ -77,14 +48,11 @@ module Game =
             |> transform (Quaternion(0.f, cos(t),0.f,sin(t)))
             |> transform (Quaternion(0.f,0.f,cos(t),sin(t)))
         let cube = 
-            
-            //TODO: move to the world matrix
-        
-            
+            //TODO: move rotation to the world matrix so that computation happens on the gpu and not the cpu.
             let p1 = (Volumetric.Shape.prism (Vector3(0.f,0.f,0.f)) 1.f 2.f 1.f)
-        
             p1 |> Array.map ( scale >> rotate >> paint RgbaFloat.DarkRed)
-        let test = (Stl.read "test.stl") |> Array.map (scale >> rotate >> paint RgbaFloat.Blue)
+        //this should eventually become more generalized and not just custom code.
+        let test = (Volumetric.Stl.read "test.stl") |> Array.map (scale >> rotate >> paint RgbaFloat.Blue)
         [| yield!  test |]
         |> Array.map Vertex.create
 
@@ -99,8 +67,6 @@ module Game =
 
         let createBuffers quadVerticies =
             let createBuffer (bufferDescription:BufferDescription) = factory.CreateBuffer(bufferDescription)
-
-            
             let quadIndicies : uint16[] = quadVerticies |> Array.mapi (fun i _ -> uint16(i) )
             let vertexBuffer = BufferDescription( getSize quadVerticies, BufferUsage.VertexBuffer) |> createBuffer
             let indexBuffer = BufferDescription(getSize quadIndicies, BufferUsage.IndexBuffer) |> createBuffer
@@ -124,11 +90,9 @@ module Game =
             let color = VertexElementDescription("Color", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float4)
             VertexLayoutDescription(position, color)
 
-        let getBytes (s : string) = Encoding.UTF8.GetBytes s
-
         let createShaderDesc (stage:ShaderStages) (shader:string) = 
             let shaderCode = IO.File.ReadAllText(shader)
-            ShaderDescription(stage, getBytes(shaderCode), "main")
+            ShaderDescription(stage, Encoding.UTF8.GetBytes(shaderCode), "main")
         let vertexShaderDesc = createShaderDesc ShaderStages.Vertex "vertexShader.glsl"
         let fragmentShaderDesc = createShaderDesc ShaderStages.Fragment "fragmentShader.glsl"
         let shaders = factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc)
@@ -142,7 +106,7 @@ module Game =
                 comparisonKind= ComparisonKind.LessEqual)
             pd.RasterizerState <- RasterizerStateDescription(
                 cullMode= FaceCullMode.None,
-                fillMode= PolygonFillMode.Solid,
+                fillMode= PolygonFillMode.Wireframe,
                 frontFace= FrontFace.Clockwise,
                 depthClipEnabled= false,
                 scissorTestEnabled= false)
@@ -180,8 +144,16 @@ module Game =
 
 [<EntryPoint>]
 let main argv =
-    let wci = Game.createWindow "veldridGame"
-    let window = VeldridStartup.CreateWindow(ref wci)
+    let createWindow title = 
+        let mutable wci = WindowCreateInfo()
+        wci.X            <- 100
+        wci.Y            <- 100
+        wci.WindowWidth  <- 400
+        wci.WindowHeight <- 400
+        wci.WindowTitle  <- title
+        wci
+    let windowCreateInfo = createWindow "veldridGame"
+    let window = VeldridStartup.CreateWindow(ref windowCreateInfo)
     let props = Game.createResources window
     while window.Exists do
         let snapshot = window.PumpEvents()
